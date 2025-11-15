@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 构建项目
+        run: pnpm build
+
+      - name: 获取版本号
+        id: get_version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/6551-plugin-v${{ steps.get_version.outputs.VERSION }}.zip
+          body: |
+            ## 📦 安装方法
+
+            1. 下载 `6551-plugin-v${{ steps.get_version.outputs.VERSION }}.zip`
+            2. 解压文件
+            3. 打开 Chrome 浏览器，进入 `chrome://extensions/`
+            4. 启用"开发者模式"
+            5. 点击"加载已解压的扩展程序"
+            6. 选择解压后的目录
+          draft: false
+          prerelease: false
