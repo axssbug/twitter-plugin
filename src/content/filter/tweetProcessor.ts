@@ -100,69 +100,119 @@ export class TweetProcessor {
    * 检查推文内容是否包含过滤关键词（不区分大小写）
    */
   containsFilterKeyword(content: string): string | null {
-    const contentLower = content.toLowerCase()
-
-    // 先检查白名单关键词
-    const whitelistKeywords = this.storageManager.manualWhitelistKeywords || []
-    for (const keyword of whitelistKeywords) {
-      if (contentLower.includes(keyword.toLowerCase())) {
-        return null // 白名单关键词优先，不过滤
-      }
-    }
-
-    // 检查过滤关键词
-    const keywords = this.storageManager.filterKeywords || []
-    for (const keyword of keywords) {
-      if (contentLower.includes(keyword.toLowerCase())) {
-        return keyword
-      }
-    }
-    return null
+    // 使用 storageManager 的关键词过滤方法，返回匹配到的具体关键词
+    return this.storageManager.shouldFilterKeyword(content)
   }
 
   /**
    * 检查推文是否应该被过滤
-   * @returns 返回过滤原因: 用户名或关键词
+   * @returns 返回过滤原因和类型: { type: '账户'|'关键词'|'用户名', value: string }
    */
-  shouldFilterTweet(element: Element): string | null {
+  shouldFilterTweet(element: Element): { type: string, value: string } | null {
     // 检查账号过滤
     const username = this.getTweetUsername(element)
     if (username && this.storageManager.shouldFilterAccount(username)) {
       // 保存显示名称
       this.getUserDisplayName(element, username)
-      return username
+      return { type: '账户', value: username }
+    }
+
+    // 检查用户名（显示名称）过滤
+    if (username) {
+      const displayName = this.getUserDisplayName(element, username)
+      const matchedUsername = this.storageManager.shouldFilterUsername(displayName)
+      if (matchedUsername) {
+        return { type: '用户名', value: matchedUsername }
+      }
     }
 
     // 检查关键词过滤
     const content = this.getTweetContent(element)
     const keyword = this.containsFilterKeyword(content)
     if (keyword) {
-      return `关键词: ${keyword}`
+      return { type: '关键词', value: keyword }
     }
 
     return null
   }
 
   /**
-   * 隐藏推文元素
+   * 创建占位块元素
    */
-  hideTweet(element: Element, username: string): void {
+  private createPlaceholder(filterType: string, filterValue: string): HTMLElement {
+    const placeholder = document.createElement('div')
+    placeholder.className = 'tweet-filter-placeholder'
+    placeholder.setAttribute('data-filter-placeholder', 'true')
+    placeholder.style.cssText = `
+      padding: 8px 12px;
+      margin: 4px 4px;
+      background-color: #1e1e1e;
+      border: 1px solid #2f2f2f;
+      color: #8b8b8b;
+      font-size: 13px;
+      text-align: center;
+      cursor: default;
+    `
+
+    // 根据过滤类型格式化显示文本
+    let displayText = ''
+    if (filterType === '账户') {
+      displayText = filterValue
+    } else if (filterType === '关键词') {
+      displayText = `关键词:${filterValue}`
+    } else if (filterType === '用户名') {
+      displayText = `用户名:${filterValue}`
+    }
+
+    placeholder.innerHTML = `
+      <span>由于触发<strong style="color: #b4b4b4;">${displayText}</strong>,6551为您屏蔽了该内容</span>
+    `
+    return placeholder
+  }
+
+  /**
+   * 隐藏推文元素并显示占位块
+   */
+  hideTweet(element: Element, filterType: string, filterValue: string): void {
     const htmlElement = element as HTMLElement
+
+    // 检查是否已经添加了占位块
+    const existingPlaceholder = htmlElement.nextElementSibling
+    if (existingPlaceholder && existingPlaceholder.getAttribute('data-filter-placeholder') === 'true') {
+      return
+    }
+
+    // 隐藏推文
     if (htmlElement.style.display !== 'none') {
       htmlElement.style.display = 'none'
-      htmlElement.setAttribute('data-filtered-user', username)
-      console.log(`[推文过滤器] 已隐藏推文 - 用户: ${username}`)
+      htmlElement.setAttribute('data-filtered-user', filterValue)
+      htmlElement.setAttribute('data-filtered-type', filterType)
+
+      // 在推文后面插入占位块
+      const placeholder = this.createPlaceholder(filterType, filterValue)
+      htmlElement.after(placeholder)
+
+      // 增加拦截计数
+      this.storageManager.incrementBlockCount()
+
+      console.log(`[推文过滤器] 已隐藏推文 - 类型: ${filterType}, 值: ${filterValue}`)
     }
   }
 
   /**
-   * 显示推文元素
+   * 显示推文元素并移除占位块
    */
   showTweet(element: Element): void {
     const htmlElement = element as HTMLElement
     if (htmlElement.style.display === 'none' && htmlElement.getAttribute('data-filtered-user')) {
       htmlElement.style.display = ''
       htmlElement.removeAttribute('data-filtered-user')
+
+      // 移除占位块
+      const nextElement = htmlElement.nextElementSibling
+      if (nextElement && nextElement.getAttribute('data-filter-placeholder') === 'true') {
+        nextElement.remove()
+      }
     }
   }
 
@@ -193,9 +243,9 @@ export class TweetProcessor {
       return
     }
 
-    const username = this.shouldFilterTweet(element)
-    if (username && this.storageManager.isFilterEnabled) {
-      this.hideTweet(element, username)
+    const filterResult = this.shouldFilterTweet(element)
+    if (filterResult && this.storageManager.isFilterEnabled) {
+      this.hideTweet(element, filterResult.type, filterResult.value)
       this.processedTweets.add(element)
     } else if (!this.storageManager.isFilterEnabled) {
       this.showTweet(element)
@@ -227,23 +277,34 @@ export class TweetProcessor {
 
   /**
    * 获取被过滤的用户统计
+   * @returns Map<过滤键(type:value), { type, value, count }>
    */
-  getFilteredUsers(): Map<string, number> {
-    const userCounts = new Map<string, number>()
+  getFilteredUsers(): Map<string, { type: string, value: string, count: number }> {
+    const filterCounts = new Map<string, { type: string, value: string, count: number }>()
     const hiddenTweets = document.querySelectorAll('article[data-testid="tweet"][data-filtered-user]')
 
     hiddenTweets.forEach(tweet => {
-      const username = tweet.getAttribute('data-filtered-user')
-      if (username) {
-        userCounts.set(username, (userCounts.get(username) || 0) + 1)
+      const filterValue = tweet.getAttribute('data-filtered-user')
+      const filterType = tweet.getAttribute('data-filtered-type')
 
-        if (!this.userDisplayNames.has(username)) {
-          this.getUserDisplayName(tweet, username)
+      if (filterValue && filterType) {
+        const key = `${filterType}:${filterValue}`
+        const existing = filterCounts.get(key)
+
+        if (existing) {
+          existing.count++
+        } else {
+          filterCounts.set(key, { type: filterType, value: filterValue, count: 1 })
+        }
+
+        // 如果是账户类型，保存显示名称
+        if (filterType === '账户' && !this.userDisplayNames.has(filterValue)) {
+          this.getUserDisplayName(tweet, filterValue)
         }
       }
     })
 
-    return userCounts
+    return filterCounts
   }
 
   /**

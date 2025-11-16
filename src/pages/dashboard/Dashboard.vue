@@ -3,8 +3,9 @@ import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import AccountFilter from "./components/AccountFilter.vue";
 import KeywordFilter from "./components/KeywordFilter.vue";
+import UsernameFilter from "./components/UsernameFilter.vue";
 
-const currentMenu = ref<"accounts" | "keywords">("accounts");
+const currentMenu = ref<"accounts" | "keywords" | "usernames">("accounts");
 const isRefreshing = ref(false);
 
 /**
@@ -50,6 +51,9 @@ async function handleRefresh() {
         <el-menu-item index="keywords">
           <span>关键词过滤</span>
         </el-menu-item>
+        <el-menu-item index="usernames">
+          <span>用户名过滤</span>
+        </el-menu-item>
       </el-menu>
 
       <!-- 刷新按钮 -->
@@ -70,6 +74,7 @@ async function handleRefresh() {
     <el-main class="overflow-hidden">
       <AccountFilter v-if="currentMenu === 'accounts'" />
       <KeywordFilter v-if="currentMenu === 'keywords'" />
+      <UsernameFilter v-if="currentMenu === 'usernames'" />
     </el-main>
   </el-container>
 </template>

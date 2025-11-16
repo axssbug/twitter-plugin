@@ -13,6 +13,7 @@ export default defineManifest({
     default_icon: {
       48: 'public/logo.png',
     },
+    default_popup: 'src/popup/index.html',
   },
   background: {
     service_worker: 'src/background/index.ts',
@@ -30,4 +31,7 @@ export default defineManifest({
     'https://6551.tos-cn-hongkong.volces.com/*',
     'https://ai.6551.io/*',
   ],
+  content_security_policy: {
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+  },
 })

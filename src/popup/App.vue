@@ -1,95 +1,129 @@
 <script setup lang="ts">
 import { reactive, onMounted } from 'vue'
 import { useFilterStore } from '../stores/filterStore'
+import { Refresh, Setting } from '@element-plus/icons-vue'
 
 const filterStore = useFilterStore()
 
 const state = reactive({
-  isRefreshing: false,
-  errorMessage: '',
+  blockCount: 0, // 总拦截数量
 })
 
-// 格式化时间
-function formatTime(timestamp: number | null): string {
-  if (!timestamp) return '从未更新'
-
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-
-  if (diffMins < 1) return '刚刚'
-  if (diffMins < 60) return `${diffMins} 分钟前`
-
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours} 小时前`
-
-  const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays} 天前`
+// 打开详细设置页面
+function openSettings() {
+  chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/dashboard/index.html') })
 }
 
-// 手动刷新数据
-async function handleRefresh() {
-  state.isRefreshing = true
-  state.errorMessage = ''
+// 切换账号过滤
+async function toggleAccountFilter() {
+  console.log('[推文过滤器] 账号过滤切换为:', filterStore.state.accountFilterEnabled)
+  await filterStore.saveToStorage()
+}
 
+// 切换关键词过滤
+async function toggleKeywordFilter() {
+  console.log('[推文过滤器] 关键词过滤切换为:', filterStore.state.keywordFilterEnabled)
+  await filterStore.saveToStorage()
+}
+
+// 切换用户名过滤
+async function toggleUsernameFilter() {
+  console.log('[推文过滤器] 用户名过滤切换为:', filterStore.state.usernameFilterEnabled)
+  await filterStore.saveToStorage()
+}
+
+// 加载拦截计数
+async function loadBlockCount() {
   try {
-    await filterStore.fetchAccounts()
+    const result = await chrome.storage.local.get(['totalBlockCount'])
+    state.blockCount = result.totalBlockCount || 0
   } catch (error) {
-    state.errorMessage = error instanceof Error ? error.message : '刷新失败'
-  } finally {
-    state.isRefreshing = false
+    console.error('[推文过滤器] 加载拦截计数失败:', error)
   }
+}
+
+// 监听存储变化
+function setupStorageListener() {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.totalBlockCount) {
+      state.blockCount = changes.totalBlockCount.newValue || 0
+    }
+  })
 }
 
 // 初始化
 onMounted(async () => {
   await filterStore.initialize()
+  await loadBlockCount()
+  setupStorageListener()
 })
 </script>
 
 <template>
-  <div class="w-80 p-4 bg-white">
-    <div class="mb-4">
-      <h1 class="text-xl font-bold text-gray-800 mb-1">6551Yap账号过滤器</h1>
-      <p class="text-sm text-gray-500">自动隐藏指定账号的推文</p>
+  <div class="w-80 bg-white">
+    <!-- 拦截统计 -->
+    <div class="p-6 text-center bg-gradient-to-br from-blue-50 to-indigo-50">
+      <div class="text-sm text-gray-600 mb-2">已拦截推文</div>
+      <div class="text-5xl font-bold text-blue-600 mb-1">
+        {{ state.blockCount.toLocaleString() }}
+      </div>
+      <div class="text-xs text-gray-500">6551 推文过滤器</div>
     </div>
 
-    <div class="mb-4 p-3 bg-gray-50 rounded-lg">
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-sm font-medium text-gray-700">启用过滤</span>
-        <input
-          type="checkbox"
-          v-model="filterStore.state.isEnabled"
-          @change="filterStore.saveToStorage"
-          class="w-4 h-4 cursor-pointer"
-        />
-      </div>
+    <!-- 过滤器列表 -->
+    <div class="px-4 pt-4 pb-4">
+      <el-card shadow="hover" :body-style="{ padding: '16px' }">
+        <div class="space-y-3">
+          <!-- 账号过滤 -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <el-icon :size="20" color="#409EFF">
+                <User />
+              </el-icon>
+              <span class="text-sm text-gray-700">账号过滤</span>
+            </div>
+            <el-switch v-model="filterStore.state.accountFilterEnabled" @change="toggleAccountFilter" />
+          </div>
 
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-gray-700">过滤账号数量</span>
-        <span class="text-lg font-bold text-blue-600">{{ filterStore.state.accounts.length }}</span>
-      </div>
+          <el-divider style="margin: 8px 0" />
 
-      <div class="flex items-center justify-between">
-        <span class="text-sm font-medium text-gray-700">最后更新</span>
-        <span class="text-sm text-gray-500">{{ formatTime(filterStore.state.lastUpdateTime) }}</span>
-      </div>
+          <!-- 关键词过滤 -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <el-icon :size="20" color="#67C23A">
+                <PriceTag />
+              </el-icon>
+              <span class="text-sm text-gray-700">关键词过滤</span>
+            </div>
+            <el-switch v-model="filterStore.state.keywordFilterEnabled" @change="toggleKeywordFilter" />
+          </div>
+
+          <el-divider style="margin: 8px 0" />
+
+          <!-- 用户名过滤 -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <el-icon :size="20" color="#E6A23C">
+                <Avatar />
+              </el-icon>
+              <span class="text-sm text-gray-700">用户名过滤</span>
+            </div>
+            <el-switch v-model="filterStore.state.usernameFilterEnabled" @change="toggleUsernameFilter" />
+          </div>
+        </div>
+      </el-card>
     </div>
 
-    <div v-if="state.errorMessage" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-      <p class="text-sm text-red-600">{{ state.errorMessage }}</p>
-    </div>
-
-    <div class="mb-4">
-      <button
-        @click="handleRefresh"
-        :disabled="state.isRefreshing || filterStore.state.isLoading"
-        class="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+    <!-- 底部操作按钮 -->
+    <div class="px-4 pb-4">
+      <el-button
+        class="w-full"
+        type="primary"
+        @click="openSettings"
+        :icon="Setting"
       >
-        <span v-if="state.isRefreshing || filterStore.state.isLoading">正在刷新...</span>
-        <span v-else>手动刷新</span>
-      </button>
+        打开完整设置
+      </el-button>
     </div>
   </div>
 </template>
