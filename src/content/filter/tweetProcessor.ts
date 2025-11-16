@@ -120,8 +120,9 @@ export class TweetProcessor {
     // 检查用户名（显示名称）过滤
     if (username) {
       const displayName = this.getUserDisplayName(element, username)
-      if (displayName !== username && this.storageManager.shouldFilterUsername(displayName)) {
-        return { type: '用户名', value: displayName }
+      const matchedUsername = this.storageManager.shouldFilterUsername(displayName)
+      if (matchedUsername) {
+        return { type: '用户名', value: matchedUsername }
       }
     }
 

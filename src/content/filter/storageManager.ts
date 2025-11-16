@@ -281,23 +281,30 @@ export class StorageManager {
 
   /**
    * 检查用户名是否应该被过滤
+   * @returns 返回匹配到的用户名关键词，如果没有匹配则返回null
    */
-  shouldFilterUsername(username: string): boolean {
+  shouldFilterUsername(username: string): string | null {
     // 检查用户名过滤是否启用
     if (!this.usernameFilterEnabled) {
-      return false
+      return null
     }
 
     // 检查是否在白名单中(优先级最高)
-    const isWhitelisted = this.manualWhitelistUsernames.includes(username) ||
-                         this.manualWhitelistUsernames.includes('@' + username)
-    if (isWhitelisted) {
-      return false
+    const usernameLower = username.toLowerCase()
+    for (const whiteUsername of this.manualWhitelistUsernames) {
+      if (usernameLower.includes(whiteUsername.toLowerCase())) {
+        return null
+      }
     }
 
     // 检查手动过滤列表
-    return this.manualBlockedUsernames.includes(username) ||
-           this.manualBlockedUsernames.includes('@' + username)
+    for (const filterUsername of this.manualBlockedUsernames) {
+      if (usernameLower.includes(filterUsername.toLowerCase())) {
+        return filterUsername
+      }
+    }
+
+    return null
   }
 
   /**

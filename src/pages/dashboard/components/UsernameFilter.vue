@@ -146,14 +146,6 @@ async function removeUsername(username: string, type: "manual" | "whitelist") {
 }
 
 /**
- * 打开 X 用户页面
- */
-function openXUser(username: string) {
-  const name = username.startsWith("@") ? username.slice(1) : username;
-  window.open(`https://x.com/${name}`, "_blank");
-}
-
-/**
  * 监听存储变化（仅监听外部变化）
  */
 function setupStorageListener() {
@@ -208,9 +200,7 @@ onMounted(() => {
             <el-table :data="paginatedManualUsernames" class="flex-1">
               <el-table-column label="用户名">
                 <template #default="{ row }">
-                  <span class="text-[#67c23a] cursor-pointer hover:text-[#85ce61]" @click="openXUser(row)">
-                    {{ row.startsWith("@") ? row : "@" + row }}
-                  </span>
+                  <el-tag type="warning" effect="dark">{{ row }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="100">
@@ -240,9 +230,7 @@ onMounted(() => {
             <el-table :data="paginatedWhitelistUsernames" class="flex-1">
               <el-table-column label="用户名">
                 <template #default="{ row }">
-                  <span class="text-[#67c23a] cursor-pointer hover:text-[#85ce61]" @click="openXUser(row)">
-                    {{ row.startsWith("@") ? row : "@" + row }}
-                  </span>
+                  <el-tag type="info" effect="dark">{{ row }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="100">
