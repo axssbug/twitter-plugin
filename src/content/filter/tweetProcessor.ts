@@ -152,8 +152,19 @@ export class TweetProcessor {
       text-align: center;
       cursor: default;
     `
+
+    // 根据过滤类型格式化显示文本
+    let displayText = ''
+    if (filterType === '账户') {
+      displayText = filterValue
+    } else if (filterType === '关键词') {
+      displayText = `关键词:${filterValue}`
+    } else if (filterType === '用户名') {
+      displayText = `用户名:${filterValue}`
+    }
+
     placeholder.innerHTML = `
-      <span>由于触发<strong style="color: #b4b4b4;">${filterType}</strong> <strong style="color: #b4b4b4;">${filterValue}</strong>,6551为您屏蔽了该内容</span>
+      <span>由于触发<strong style="color: #b4b4b4;">${displayText}</strong>,6551为您屏蔽了该内容</span>
     `
     return placeholder
   }
@@ -174,6 +185,7 @@ export class TweetProcessor {
     if (htmlElement.style.display !== 'none') {
       htmlElement.style.display = 'none'
       htmlElement.setAttribute('data-filtered-user', filterValue)
+      htmlElement.setAttribute('data-filtered-type', filterType)
 
       // 在推文后面插入占位块
       const placeholder = this.createPlaceholder(filterType, filterValue)
@@ -264,23 +276,34 @@ export class TweetProcessor {
 
   /**
    * 获取被过滤的用户统计
+   * @returns Map<过滤键(type:value), { type, value, count }>
    */
-  getFilteredUsers(): Map<string, number> {
-    const userCounts = new Map<string, number>()
+  getFilteredUsers(): Map<string, { type: string, value: string, count: number }> {
+    const filterCounts = new Map<string, { type: string, value: string, count: number }>()
     const hiddenTweets = document.querySelectorAll('article[data-testid="tweet"][data-filtered-user]')
 
     hiddenTweets.forEach(tweet => {
-      const username = tweet.getAttribute('data-filtered-user')
-      if (username) {
-        userCounts.set(username, (userCounts.get(username) || 0) + 1)
+      const filterValue = tweet.getAttribute('data-filtered-user')
+      const filterType = tweet.getAttribute('data-filtered-type')
 
-        if (!this.userDisplayNames.has(username)) {
-          this.getUserDisplayName(tweet, username)
+      if (filterValue && filterType) {
+        const key = `${filterType}:${filterValue}`
+        const existing = filterCounts.get(key)
+
+        if (existing) {
+          existing.count++
+        } else {
+          filterCounts.set(key, { type: filterType, value: filterValue, count: 1 })
+        }
+
+        // 如果是账户类型，保存显示名称
+        if (filterType === '账户' && !this.userDisplayNames.has(filterValue)) {
+          this.getUserDisplayName(tweet, filterValue)
         }
       }
     })
 
-    return userCounts
+    return filterCounts
   }
 
   /**

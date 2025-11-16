@@ -30,7 +30,7 @@ async function sendFeedback(twAccount: string, feedbackUser: string) {
     const response = await fetch("https://ai.6551.io/api/plugin/yap/feedback", {
       method: "POST",
       headers: {
-        "Content-Type": "text/plain",
+        "Content-Type": "application/json",
       },
       body: encryptedData,
     });
@@ -67,7 +67,7 @@ async function sendManualReport(twAccount: string, url: string, feedbackUser: st
     const response = await fetch('https://ai.6551.io/api/plugin/yap/manual', {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'application/json',
       },
       body: encryptedData,
     })

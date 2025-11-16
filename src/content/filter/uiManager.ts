@@ -96,20 +96,30 @@ export class UIManager {
     const filteredUsers = this.tweetProcessor.getFilteredUsers()
 
     const userListHtml = Array.from(filteredUsers.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([username, count]) => {
-        const displayName = this.tweetProcessor.getUserDisplayNameFromCache(username)
-        // 如果 displayName 为空或只有空白字符，使用 @username
-        const showName = displayName && displayName.trim() ? displayName : `@${username}`
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([key, filterInfo]) => {
+        const { type, value, count } = filterInfo
+
+        // 根据类型格式化显示文本
+        let displayText = ''
+        if (type === '账户') {
+          const displayName = this.tweetProcessor.getUserDisplayNameFromCache(value)
+          displayText = displayName && displayName.trim() ? displayName : `@${value}`
+        } else if (type === '关键词') {
+          displayText = `关键词:${value}`
+        } else if (type === '用户名') {
+          displayText = `用户名:${value}`
+        }
+
         return `
           <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; color: #536471; gap: 8px;">
-            <span class="filter-feedback-btn" data-username="${username}"
+            <span class="filter-feedback-btn" data-username="${value}" data-filter-type="${type}"
                   style="cursor: pointer; font-size: 16px; flex-shrink: 0;"
                   title="反馈误报">⚠️</span>
-            <span class="filter-user-link" data-username="${username}"
+            <span class="filter-user-link" data-username="${value}" data-filter-type="${type}"
                   style="cursor: pointer; color: #1d9bf0; flex: 1; width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                  title="点击查看 @${username}">
-              ${showName}
+                  title="${type === '账户' ? `点击查看 @${value}` : displayText}">
+              ${displayText}
             </span>
             <span style="font-weight: bold; color: #1d9bf0; margin-left: 8px; flex-shrink: 0;">${count}</span>
           </div>
@@ -194,7 +204,9 @@ export class UIManager {
       // 处理用户名点击
       if (target.classList.contains('filter-user-link')) {
         const username = target.getAttribute('data-username')
-        if (username) {
+        const filterType = target.getAttribute('data-filter-type')
+        // 只有账户类型才打开Twitter链接
+        if (username && filterType === '账户') {
           window.open(`https://x.com/${username}`, '_blank')
         }
         return
