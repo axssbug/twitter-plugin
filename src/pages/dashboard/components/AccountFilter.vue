@@ -2,11 +2,11 @@
 import { ref, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-const filterAccounts = ref<string[]>([]);
 const manualBlockedAccounts = ref<string[]>([]);
 const manualWhitelistAccounts = ref<string[]>([]);
 const isFilterEnabled = ref(true);
-const currentTab = ref<"system" | "manual" | "whitelist">("system");
+const currentTab = ref<"manual" | "whitelist">("manual");
+const systemAccountCount = ref(0);
 
 // 搜索和分页
 const searchText = ref("");
@@ -15,16 +15,7 @@ const manualCurrentPage = ref(1);
 const whitelistCurrentPage = ref(1);
 const pageSize = ref(20);
 
-// 计算属性：排除手动上报的账号
-const systemFilterAccounts = computed(() => {
-  return filterAccounts.value.filter((acc) => !manualBlockedAccounts.value.includes(acc));
-});
-
 // 过滤后的数据
-const filteredSystemAccounts = computed(() => {
-  if (!searchText.value) return systemFilterAccounts.value;
-  return systemFilterAccounts.value.filter((acc) => acc.toLowerCase().includes(searchText.value.toLowerCase()));
-});
 
 const filteredManualAccounts = computed(() => {
   if (!searchText.value) return manualBlockedAccounts.value;
@@ -37,12 +28,6 @@ const filteredWhitelistAccounts = computed(() => {
 });
 
 // 分页后的数据
-const paginatedSystemAccounts = computed(() => {
-  const start = (systemCurrentPage.value - 1) * pageSize.value;
-  const end = start + pageSize.value;
-  return filteredSystemAccounts.value.slice(start, end);
-});
-
 const paginatedManualAccounts = computed(() => {
   const start = (manualCurrentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
@@ -60,9 +45,7 @@ const paginatedWhitelistAccounts = computed(() => {
  */
 async function loadData() {
   try {
-    const result = await chrome.storage.local.get(["filterAccounts", "manualBlockedAccounts", "manualWhitelistAccounts", "isEnabled"]);
-
-    filterAccounts.value = Array.isArray(result.filterAccounts) ? result.filterAccounts : Object.values(result.filterAccounts || {});
+    const result = await chrome.storage.local.get(["manualBlockedAccounts", "manualWhitelistAccounts", "isEnabled", "wasmAccountCount"]);
 
     manualBlockedAccounts.value = Array.isArray(result.manualBlockedAccounts)
       ? result.manualBlockedAccounts
@@ -73,6 +56,7 @@ async function loadData() {
       : Object.values(result.manualWhitelistAccounts || {});
 
     isFilterEnabled.value = result.isEnabled !== undefined ? result.isEnabled : true;
+    systemAccountCount.value = result.wasmAccountCount || 0;
   } catch (error) {
     console.error("[推文过滤器] 加载数据失败:", error);
   }
@@ -161,38 +145,15 @@ onMounted(() => {
       <el-switch v-model="isFilterEnabled" @change="toggleFilterEnabled" active-text="已启用" inactive-text="已禁用" />
     </div>
 
+    <!-- 智能识别提示 -->
+    <div class="px-6 py-3 mb-4 bg-[#0d0d0d] border-b border-[#2a2a2a]">
+      <p class="text-sm text-gray-400">
+        6551智能识别 <span class="text-[#409eff] font-semibold">{{ systemAccountCount }}</span> 个账户
+      </p>
+    </div>
+
     <!-- Tabs -->
     <el-tabs type="border-card" v-model="currentTab" class="flex-1 flex flex-col overflow-hidden">
-      <el-tab-pane label="系统过滤" name="system">
-        <div class="h-[calc(100vh-200px)] flex flex-col bg-[#1a1a1a]">
-          <el-empty v-if="filteredSystemAccounts.length === 0" description="暂无系统过滤账号" />
-          <template v-else>
-            <el-table
-              :data="paginatedSystemAccounts"
-              class="flex-1"
-              @row-click="openXAccount"
-              :row-style="{ cursor: 'pointer' }"
-            >
-              <el-table-column label="账号">
-                <template #default="{ row }">
-                  <span class="text-[#67c23a] hover:text-[#85ce61]">{{ row.startsWith("@") ? row : "@" + row }}</span>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div class="p-4 text-right border-t">
-              <el-pagination
-                v-model:current-page="systemCurrentPage"
-                v-model:page-size="pageSize"
-                :page-sizes="[10, 20, 50, 100]"
-                :total="filteredSystemAccounts.length"
-                layout="total, sizes, prev, pager, next, jumper"
-                background
-              />
-            </div>
-          </template>
-        </div>
-      </el-tab-pane>
-
       <el-tab-pane label="手动过滤" name="manual">
         <div class="h-[calc(100vh-200px)] flex flex-col bg-[#1a1a1a]">
           <el-empty v-if="filteredManualAccounts.length === 0" description="暂无手动过滤账号" />

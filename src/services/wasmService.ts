@@ -1,0 +1,196 @@
+/**
+ * WASM 数据查询服务
+ * 从远程加载 WASM 文件并提供账号和关键词查询功能
+ */
+
+import * as ASLoader from '@assemblyscript/loader'
+
+const YAP_WASM_URL = 'https://6551.tos-cn-hongkong.volces.com/yap/yap.wasm'
+const INFOFI_JSON_URL = 'https://6551.tos-cn-hongkong.volces.com/yap/infofi.json'
+
+// WASM 模块实例和关键词数据
+let yapWasmInstance: any = null
+let infofiKeywords: Set<string> = new Set()
+
+/**
+ * 加载 yap.wasm 模块
+ */
+async function loadYapWasm(): Promise<void> {
+  try {
+    console.log('[WASM服务] 正在加载 yap.wasm...')
+
+    // 使用 fetch 加载 WASM 文件
+    const response = await fetch(YAP_WASM_URL)
+    const buffer = await response.arrayBuffer()
+
+    // 使用 AssemblyScript Loader 实例化
+    const wasm = await ASLoader.instantiate(buffer, {
+      env: {
+        abort: (_msg: number, _file: number, _line: number, _column: number) => {
+          console.error('[WASM] Abort called')
+        },
+      },
+    })
+
+    yapWasmInstance = wasm.exports
+
+    console.log('[WASM服务] yap.wasm 加载成功')
+  } catch (error) {
+    console.error('[WASM服务] 加载 yap.wasm 失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 加载 infofi.json 关键词数据
+ */
+async function loadInfofiJson(): Promise<void> {
+  try {
+    console.log('[数据服务] 正在加载 infofi.json...')
+
+    // 使用 fetch 加载 JSON 文件
+    const response = await fetch(INFOFI_JSON_URL)
+    const data = await response.json()
+
+    // 解析数据并转为小写存入 Set
+    if (data.dataList && Array.isArray(data.dataList)) {
+      infofiKeywords.clear()
+      data.dataList.forEach((item: { text: string }) => {
+        if (item.text) {
+          infofiKeywords.add(item.text.toLowerCase())
+        }
+      })
+      console.log(`[数据服务] infofi.json 加载成功，共 ${infofiKeywords.size} 个关键词`)
+    } else {
+      throw new Error('infofi.json 格式错误')
+    }
+  } catch (error) {
+    console.error('[数据服务] 加载 infofi.json 失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 初始化所有数据模块
+ */
+export async function initializeWasm(): Promise<void> {
+  await Promise.all([
+    loadYapWasm(),
+    loadInfofiJson()
+  ])
+  console.log('[数据服务] 所有数据模块初始化完成')
+}
+
+/**
+ * 检查账号是否在过滤列表中
+ * @param account 账号名称
+ * @returns true 表示存在，false 表示不存在
+ */
+export function hasAccount(account: string): boolean {
+  if (!yapWasmInstance) {
+    console.warn('[WASM服务] yap.wasm 尚未加载')
+    return false
+  }
+
+  try {
+    // 转为小写
+    const lowerAccount = account.toLowerCase()
+
+    // 使用 __newString 创建 WASM 字符串
+    const strPtr = yapWasmInstance.__newString(lowerAccount)
+
+    // 调用 WASM 函数
+    const result = yapWasmInstance.hasAccount(strPtr)
+
+    return result === 1
+  } catch (error) {
+    console.error('[WASM服务] hasAccount 调用失败:', error, '参数:', account)
+    return false
+  }
+}
+
+/**
+ * 获取过滤账号数量
+ * @returns 账号数量
+ */
+export function getAccountCount(): number {
+  if (!yapWasmInstance) {
+    console.warn('[WASM服务] yap.wasm 尚未加载')
+    return 0
+  }
+
+  try {
+    return yapWasmInstance.count()
+  } catch (error) {
+    console.error('[WASM服务] count 调用失败:', error)
+    return 0
+  }
+}
+
+/**
+ * 检查文本中是否包含过滤关键词列表中的任何一个
+ * @param text 要检查的文本
+ * @returns 返回匹配到的关键词，如果没有匹配则返回null
+ */
+export function hasWord(text: string): string | null {
+  if (infofiKeywords.size === 0) {
+    console.warn('[数据服务] infofi 关键词数据尚未加载')
+    return null
+  }
+
+  try {
+    // 转为小写
+    const lowerText = text.toLowerCase()
+
+    // 检查文本是否包含关键词列表中的任何一个
+    for (const keyword of infofiKeywords) {
+      if (lowerText.includes(keyword)) {
+        return keyword
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('[数据服务] hasWord 调用失败:', error, '参数:', text)
+    return null
+  }
+}
+
+/**
+ * 获取过滤关键词数量
+ * @returns 关键词数量
+ */
+export function getWordCount(): number {
+  return infofiKeywords.size
+}
+
+/**
+ * 带重试机制的初始化函数
+ * @param maxRetries 最大重试次数
+ */
+export async function initializeWasmWithRetry(maxRetries = 3): Promise<void> {
+  let lastError: Error | null = null
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await initializeWasm()
+      return
+    } catch (error) {
+      lastError = error as Error
+      console.log(`[WASM服务] 第 ${i + 1} 次初始化失败，${i < maxRetries - 1 ? '正在重试...' : '已达到最大重试次数'}`)
+
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+      }
+    }
+  }
+
+  throw lastError || new Error('WASM 初始化失败')
+}
+
+/**
+ * 检查数据模块是否已加载
+ */
+export function isWasmLoaded(): boolean {
+  return yapWasmInstance !== null && infofiKeywords.size > 0
+}

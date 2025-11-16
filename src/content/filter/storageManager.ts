@@ -1,49 +1,54 @@
+import { hasAccount, hasWord, getAccountCount, getWordCount, isWasmLoaded } from '../../services/wasmService'
+
 /**
  * 存储管理类
  * 负责加载和监听过滤账号列表和关键词列表
  */
 export class StorageManager {
-  // 过滤账号列表
-  public filterAccounts: string[] = []
   // 手动上报的账号列表
   public manualBlockedAccounts: string[] = []
   // 手动不屏蔽的账号列表(白名单)
   public manualWhitelistAccounts: string[] = []
-  // 过滤关键词列表
-  public filterKeywords: string[] = []
   // 手动上报的关键词列表
   public manualBlockedKeywords: string[] = []
   // 关键词白名单
   public manualWhitelistKeywords: string[] = []
+  // 手动上报的用户名列表
+  public manualBlockedUsernames: string[] = []
+  // 用户名白名单
+  public manualWhitelistUsernames: string[] = []
   // 是否启用过滤
   public isFilterEnabled = true
+  // 账号过滤开关
+  public accountFilterEnabled = true
+  // 关键词过滤开关
+  public keywordFilterEnabled = true
+  // 用户名过滤开关
+  public usernameFilterEnabled = true
+  // 总拦截数量
+  public totalBlockCount = 0
 
   // 存储变化回调
   private onStorageChangeCallback?: () => void
 
   /**
-   * 加载过滤账号列表
+   * 加载配置数据
    */
   async loadFilterAccounts(): Promise<void> {
     try {
       const result = await chrome.storage.local.get([
-        'filterAccounts',
         'isEnabled',
+        'accountFilterEnabled',
+        'keywordFilterEnabled',
+        'usernameFilterEnabled',
         'manualBlockedAccounts',
         'manualWhitelistAccounts',
-        'filterKeywords',
         'manualBlockedKeywords',
-        'manualWhitelistKeywords'
+        'manualWhitelistKeywords',
+        'manualBlockedUsernames',
+        'manualWhitelistUsernames',
+        'totalBlockCount'
       ])
-
-      if (result.filterAccounts) {
-        this.filterAccounts = Array.isArray(result.filterAccounts)
-          ? result.filterAccounts
-          : Object.values(result.filterAccounts)
-        console.log(`[推文过滤器] 已加载 ${this.filterAccounts.length} 个过滤账号`)
-      } else {
-        console.log('[推文过滤器] 未找到缓存的过滤账号')
-      }
 
       if (result.manualBlockedAccounts) {
         this.manualBlockedAccounts = Array.isArray(result.manualBlockedAccounts)
@@ -57,13 +62,6 @@ export class StorageManager {
           ? result.manualWhitelistAccounts
           : Object.values(result.manualWhitelistAccounts)
         console.log(`[推文过滤器] 已加载 ${this.manualWhitelistAccounts.length} 个手动不屏蔽账号`)
-      }
-
-      if (result.filterKeywords) {
-        this.filterKeywords = Array.isArray(result.filterKeywords)
-          ? result.filterKeywords
-          : Object.values(result.filterKeywords)
-        console.log(`[推文过滤器] 已加载 ${this.filterKeywords.length} 个过滤关键词`)
       }
 
       if (result.manualBlockedKeywords) {
@@ -80,9 +78,53 @@ export class StorageManager {
         console.log(`[推文过滤器] 已加载 ${this.manualWhitelistKeywords.length} 个关键词白名单`)
       }
 
+      if (result.manualBlockedUsernames) {
+        this.manualBlockedUsernames = Array.isArray(result.manualBlockedUsernames)
+          ? result.manualBlockedUsernames
+          : Object.values(result.manualBlockedUsernames)
+        console.log(`[推文过滤器] 已加载 ${this.manualBlockedUsernames.length} 个手动过滤用户名`)
+      }
+
+      if (result.manualWhitelistUsernames) {
+        this.manualWhitelistUsernames = Array.isArray(result.manualWhitelistUsernames)
+          ? result.manualWhitelistUsernames
+          : Object.values(result.manualWhitelistUsernames)
+        console.log(`[推文过滤器] 已加载 ${this.manualWhitelistUsernames.length} 个用户名白名单`)
+      }
+
       this.isFilterEnabled = result.isEnabled !== undefined ? result.isEnabled : true
+      this.accountFilterEnabled = result.accountFilterEnabled !== undefined ? result.accountFilterEnabled : true
+      this.keywordFilterEnabled = result.keywordFilterEnabled !== undefined ? result.keywordFilterEnabled : true
+      this.usernameFilterEnabled = result.usernameFilterEnabled !== undefined ? result.usernameFilterEnabled : true
+      this.totalBlockCount = result.totalBlockCount || 0
+      console.log(`[推文过滤器] 总拦截数量: ${this.totalBlockCount}`)
+
+      // 保存WASM计数到storage供Dashboard使用
+      if (isWasmLoaded()) {
+        const accountCount = getAccountCount()
+        const keywordCount = getWordCount()
+        console.log(`[推文过滤器] WASM账号数量: ${accountCount}`)
+        console.log(`[推文过滤器] WASM关键词数量: ${keywordCount}`)
+
+        await chrome.storage.local.set({
+          wasmAccountCount: accountCount,
+          wasmKeywordCount: keywordCount
+        })
+      }
     } catch (error) {
-      console.error('[推文过滤器] 加载过滤账号失败:', error)
+      console.error('[推文过滤器] 加载配置失败:', error)
+    }
+  }
+
+  /**
+   * 增加拦截计数
+   */
+  async incrementBlockCount(): Promise<void> {
+    this.totalBlockCount++
+    try {
+      await chrome.storage.local.set({ totalBlockCount: this.totalBlockCount })
+    } catch (error) {
+      console.error('[推文过滤器] 保存拦截计数失败:', error)
     }
   }
 
@@ -96,13 +138,6 @@ export class StorageManager {
       if (areaName === 'local') {
         let hasChanges = false
 
-        if (changes.filterAccounts) {
-          const newValue = changes.filterAccounts.newValue || []
-          this.filterAccounts = Array.isArray(newValue) ? newValue : Object.values(newValue)
-          console.log(`[推文过滤器] 过滤列表已更新，共 ${this.filterAccounts.length} 个账号`)
-          hasChanges = true
-        }
-
         if (changes.manualBlockedAccounts) {
           const newValue = changes.manualBlockedAccounts.newValue || []
           this.manualBlockedAccounts = Array.isArray(newValue) ? newValue : Object.values(newValue)
@@ -114,13 +149,6 @@ export class StorageManager {
           const newValue = changes.manualWhitelistAccounts.newValue || []
           this.manualWhitelistAccounts = Array.isArray(newValue) ? newValue : Object.values(newValue)
           console.log(`[推文过滤器] 手动不屏蔽列表已更新，共 ${this.manualWhitelistAccounts.length} 个账号`)
-          hasChanges = true
-        }
-
-        if (changes.filterKeywords) {
-          const newValue = changes.filterKeywords.newValue || []
-          this.filterKeywords = Array.isArray(newValue) ? newValue : Object.values(newValue)
-          console.log(`[推文过滤器] 关键词列表已更新，共 ${this.filterKeywords.length} 个关键词`)
           hasChanges = true
         }
 
@@ -138,10 +166,47 @@ export class StorageManager {
           hasChanges = true
         }
 
+        if (changes.manualBlockedUsernames) {
+          const newValue = changes.manualBlockedUsernames.newValue || []
+          this.manualBlockedUsernames = Array.isArray(newValue) ? newValue : Object.values(newValue)
+          console.log(`[推文过滤器] 手动过滤用户名已更新，共 ${this.manualBlockedUsernames.length} 个用户名`)
+          hasChanges = true
+        }
+
+        if (changes.manualWhitelistUsernames) {
+          const newValue = changes.manualWhitelistUsernames.newValue || []
+          this.manualWhitelistUsernames = Array.isArray(newValue) ? newValue : Object.values(newValue)
+          console.log(`[推文过滤器] 用户名白名单已更新，共 ${this.manualWhitelistUsernames.length} 个用户名`)
+          hasChanges = true
+        }
+
         if (changes.isEnabled) {
           this.isFilterEnabled = changes.isEnabled.newValue
           console.log(`[推文过滤器] 过滤状态已更新: ${this.isFilterEnabled ? '启用' : '禁用'}`)
           hasChanges = true
+        }
+
+        if (changes.accountFilterEnabled) {
+          this.accountFilterEnabled = changes.accountFilterEnabled.newValue
+          console.log(`[推文过滤器] 账号过滤已更新: ${this.accountFilterEnabled ? '启用' : '禁用'}`)
+          hasChanges = true
+        }
+
+        if (changes.keywordFilterEnabled) {
+          this.keywordFilterEnabled = changes.keywordFilterEnabled.newValue
+          console.log(`[推文过滤器] 关键词过滤已更新: ${this.keywordFilterEnabled ? '启用' : '禁用'}`)
+          hasChanges = true
+        }
+
+        if (changes.usernameFilterEnabled) {
+          this.usernameFilterEnabled = changes.usernameFilterEnabled.newValue
+          console.log(`[推文过滤器] 用户名过滤已更新: ${this.usernameFilterEnabled ? '启用' : '禁用'}`)
+          hasChanges = true
+        }
+
+        if (changes.totalBlockCount) {
+          this.totalBlockCount = changes.totalBlockCount.newValue || 0
+          console.log(`[推文过滤器] 拦截计数已更新: ${this.totalBlockCount}`)
         }
 
         if (hasChanges && this.onStorageChangeCallback) {
@@ -155,6 +220,11 @@ export class StorageManager {
    * 检查账号是否应该被过滤
    */
   shouldFilterAccount(username: string): boolean {
+    // 检查账号过滤是否启用
+    if (!this.accountFilterEnabled) {
+      return false
+    }
+
     // 检查是否在白名单中(优先级最高)
     const isWhitelisted = this.manualWhitelistAccounts.includes(username) ||
                          this.manualWhitelistAccounts.includes('@' + username)
@@ -162,11 +232,72 @@ export class StorageManager {
       return false
     }
 
-    // 检查是否在过滤列表中或手动上报列表中
-    return this.filterAccounts.includes(username) ||
-           this.filterAccounts.includes('@' + username) ||
-           this.manualBlockedAccounts.includes(username) ||
+    // 检查WASM过滤列表
+    const cleanUsername = username.startsWith('@') ? username.slice(1) : username
+    if (isWasmLoaded() && hasAccount(cleanUsername)) {
+      return true
+    }
+
+    // 检查手动上报列表
+    return this.manualBlockedAccounts.includes(username) ||
            this.manualBlockedAccounts.includes('@' + username)
+  }
+
+  /**
+   * 检查关键词是否应该被过滤
+   * @returns 返回匹配到的关键词，如果没有匹配则返回null
+   */
+  shouldFilterKeyword(keyword: string): string | null {
+    // 检查关键词过滤是否启用
+    if (!this.keywordFilterEnabled) {
+      return null
+    }
+
+    // 检查是否在白名单中(优先级最高)
+    const keywordLower = keyword.toLowerCase()
+    for (const whiteKeyword of this.manualWhitelistKeywords) {
+      if (keywordLower.includes(whiteKeyword.toLowerCase())) {
+        return null
+      }
+    }
+
+    // 检查WASM过滤列表
+    if (isWasmLoaded()) {
+      const matchedWord = hasWord(keyword)
+      if (matchedWord) {
+        return matchedWord
+      }
+    }
+
+    // 检查手动过滤列表
+    for (const filterKeyword of this.manualBlockedKeywords) {
+      if (keywordLower.includes(filterKeyword.toLowerCase())) {
+        return filterKeyword
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * 检查用户名是否应该被过滤
+   */
+  shouldFilterUsername(username: string): boolean {
+    // 检查用户名过滤是否启用
+    if (!this.usernameFilterEnabled) {
+      return false
+    }
+
+    // 检查是否在白名单中(优先级最高)
+    const isWhitelisted = this.manualWhitelistUsernames.includes(username) ||
+                         this.manualWhitelistUsernames.includes('@' + username)
+    if (isWhitelisted) {
+      return false
+    }
+
+    // 检查手动过滤列表
+    return this.manualBlockedUsernames.includes(username) ||
+           this.manualBlockedUsernames.includes('@' + username)
   }
 
   /**
