@@ -158,17 +158,17 @@ export class TweetProcessor {
     `
 
     // 根据过滤类型格式化显示文本
-    let displayText = ''
+    let messageText = ''
     if (filterType === '账户') {
-      displayText = filterValue
+      messageText = `检测到<strong style="color: #b4b4b4;">${filterValue}</strong>账户疑似自动化运营账户或yapper达人，6551插件已为您自动屏蔽`
     } else if (filterType === '关键词') {
-      displayText = `关键词:${filterValue}`
+      messageText = `检测到推文包含敏感关键词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551插件已为您自动屏蔽`
     } else if (filterType === '用户名') {
-      displayText = `用户名:${filterValue}`
+      messageText = `检测到用户名包含敏感词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551插件已为您自动屏蔽`
     }
 
     placeholder.innerHTML = `
-      <span>由于触发<strong style="color: #b4b4b4;">${displayText}</strong>,6551为您屏蔽了该内容</span>
+      <span>${messageText}</span>
       <span class="show-original-tweet" style="color: #409eff; cursor: pointer; margin-left: 12px; flex-shrink: 0;">显示原文</span>
     `
 
