@@ -149,24 +149,43 @@ export class TweetProcessor {
       background-color: #1e1e1e;
       border: 1px solid #2f2f2f;
       color: #8b8b8b;
-      font-size: 13px;
-      text-align: center;
+      font-size: 12px;
+      text-align: left;
       cursor: default;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     `
 
     // 根据过滤类型格式化显示文本
-    let displayText = ''
+    let messageText = ''
     if (filterType === '账户') {
-      displayText = filterValue
+      messageText = `检测到<strong style="color: #b4b4b4;">${filterValue}</strong>账户疑似自动化运营账户或yapper达人，6551已为您自动屏蔽`
     } else if (filterType === '关键词') {
-      displayText = `关键词:${filterValue}`
+      messageText = `检测到内容包含敏感关键词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551已为您自动屏蔽`
     } else if (filterType === '用户名') {
-      displayText = `用户名:${filterValue}`
+      messageText = `检测到用户名包含敏感词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551已为您自动屏蔽`
     }
 
     placeholder.innerHTML = `
-      <span>由于触发<strong style="color: #b4b4b4;">${displayText}</strong>,6551为您屏蔽了该内容</span>
+      <span>${messageText}</span>
+      <span class="show-original-tweet" style="color: #409eff; cursor: pointer; margin-left: 12px; flex-shrink: 0;">显示原文</span>
     `
+
+    // 添加点击事件
+    const showBtn = placeholder.querySelector('.show-original-tweet')
+    if (showBtn) {
+      showBtn.addEventListener('click', () => {
+        // 找到被隐藏的推文并显示
+        const hiddenTweet = placeholder.previousElementSibling
+        if (hiddenTweet && hiddenTweet.getAttribute('data-filtered-user')) {
+          const htmlElement = hiddenTweet as HTMLElement
+          htmlElement.style.display = ''
+          placeholder.remove()
+        }
+      })
+    }
+
     return placeholder
   }
 

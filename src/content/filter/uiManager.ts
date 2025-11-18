@@ -56,7 +56,7 @@ export class UIManager {
       opacity: 0.6;
       transition: opacity 0.2s;
     `
-    reportBtn.title = '6551手动上报此账号'
+    reportBtn.title = '手动上报此账号(6551提供)'
 
     reportBtn.addEventListener('mouseenter', () => {
       reportBtn.style.opacity = '1'
