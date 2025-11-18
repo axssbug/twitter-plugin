@@ -149,7 +149,7 @@ export class TweetProcessor {
       background-color: #1e1e1e;
       border: 1px solid #2f2f2f;
       color: #8b8b8b;
-      font-size: 13px;
+      font-size: 12px;
       text-align: left;
       cursor: default;
       display: flex;
@@ -160,11 +160,11 @@ export class TweetProcessor {
     // 根据过滤类型格式化显示文本
     let messageText = ''
     if (filterType === '账户') {
-      messageText = `检测到<strong style="color: #b4b4b4;">${filterValue}</strong>账户疑似自动化运营账户或yapper达人，6551插件已为您自动屏蔽`
+      messageText = `检测到<strong style="color: #b4b4b4;">${filterValue}</strong>账户疑似自动化运营账户或yapper达人，6551已为您自动屏蔽`
     } else if (filterType === '关键词') {
-      messageText = `检测到推文包含敏感关键词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551插件已为您自动屏蔽`
+      messageText = `检测到内容包含敏感关键词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551已为您自动屏蔽`
     } else if (filterType === '用户名') {
-      messageText = `检测到用户名包含敏感词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551插件已为您自动屏蔽`
+      messageText = `检测到用户名包含敏感词<strong style="color: #b4b4b4;">${filterValue}</strong>，6551已为您自动屏蔽`
     }
 
     placeholder.innerHTML = `
