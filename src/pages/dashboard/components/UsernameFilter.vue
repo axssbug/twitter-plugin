@@ -7,7 +7,9 @@ const manualWhitelistUsernames = ref<string[]>([]);
 const isFilterEnabled = ref(true);
 const currentTab = ref<"manual" | "whitelist">("manual");
 const usernameInput = ref("");
+const whitelistInput = ref("");
 const systemUsernameCount = ref(0);
+const isRefreshing = ref(false);
 
 // 搜索和分页
 const searchText = ref("");
@@ -111,6 +113,34 @@ async function addUsername() {
 }
 
 /**
+ * 添加白名单用户名
+ */
+async function addWhitelist() {
+  const username = whitelistInput.value.trim();
+  if (!username) {
+    ElMessage.warning("用户名不能为空");
+    return;
+  }
+
+  if (manualWhitelistUsernames.value.includes(username)) {
+    ElMessage.warning("用户名已存在");
+    return;
+  }
+
+  try {
+    const newList = [...manualWhitelistUsernames.value, username];
+    await chrome.storage.local.set({ manualWhitelistUsernames: newList });
+    manualWhitelistUsernames.value = newList;
+    whitelistInput.value = "";
+    ElMessage.success("添加成功");
+    console.log(`[推文过滤器] 已添加白名单用户名: ${username}`);
+  } catch (error) {
+    console.error("[推文过滤器] 添加白名单用户名失败:", error);
+    ElMessage.error("添加失败");
+  }
+}
+
+/**
  * 移除用户名
  */
 async function removeUsername(username: string, type: "manual" | "whitelist") {
@@ -146,6 +176,24 @@ async function removeUsername(username: string, type: "manual" | "whitelist") {
 }
 
 /**
+ * 手动刷新数据
+ */
+async function handleRefresh() {
+  if (isRefreshing.value) return;
+
+  isRefreshing.value = true;
+  try {
+    await loadData();
+    ElMessage.success('数据刷新成功');
+  } catch (error) {
+    console.error('[推文过滤器] 刷新失败:', error);
+    ElMessage.error('刷新失败');
+  } finally {
+    isRefreshing.value = false;
+  }
+}
+
+/**
  * 监听存储变化（仅监听外部变化）
  */
 function setupStorageListener() {
@@ -172,86 +220,48 @@ onMounted(() => {
     <!-- 顶部工具栏 -->
     <div class="px-6 py-4 mb-4 border-b border-[#2a2a2a] flex justify-between items-center bg-[#0d0d0d]">
       <el-input v-model="searchText" placeholder="搜索用户名..." clearable class="max-w-400px" />
-      <el-switch v-model="isFilterEnabled" @change="toggleFilterEnabled" active-text="已启用" inactive-text="已禁用" />
+      <div class="flex items-center gap-4">
+        <el-switch v-model="isFilterEnabled" @change="toggleFilterEnabled" active-text="已启用" inactive-text="已禁用" />
+        <el-button :loading="isRefreshing" @click="handleRefresh" size="small">刷新</el-button>
+      </div>
     </div>
 
-    <!-- 智能识别提示 -->
-    <div class="px-6 py-3 mb-4 bg-[#0d0d0d] border-b border-[#2a2a2a]">
-      <p class="text-sm text-gray-400">
-        6551智能识别 <span class="text-[#409eff] font-semibold">{{ systemUsernameCount }}</span> 个用户名
-      </p>
+    <!-- 内容区 -->
+    <div class="flex-1 flex flex-col bg-[#1a1a1a] p-4">
+      <!-- 添加用户名输入框 -->
+      <div class="p-4 bg-[#0d0d0d] border-b border-[#2a2a2a] mb-4">
+        <el-input v-model="usernameInput" placeholder="输入要过滤的用户名..." @keyup.enter="addUsername" class="max-w-400px">
+          <template #append>
+            <el-button type="primary" @click="addUsername">添加</el-button>
+          </template>
+        </el-input>
+      </div>
+
+      <el-empty v-if="filteredManualUsernames.length === 0" description="暂无手动过滤用户名" />
+      <template v-else>
+        <el-table :data="paginatedManualUsernames" class="flex-1">
+          <el-table-column label="用户名">
+            <template #default="{ row }">
+              <el-tag type="warning" effect="dark">{{ row }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button type="danger" size="small" @click="removeUsername(row, 'manual')"> 移除 </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="p-4 text-right border-t ">
+          <el-pagination
+            v-model:current-page="manualCurrentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="filteredManualUsernames.length"
+            layout="total, sizes, prev, pager, next, jumper"
+            background
+          />
+        </div>
+      </template>
     </div>
-
-    <!-- Tabs -->
-    <el-tabs type="border-card" v-model="currentTab" class="flex-1 flex flex-col overflow-hidden">
-      <el-tab-pane label="手动过滤" name="manual">
-        <div class="h-[calc(100vh-200px)] flex flex-col bg-[#1a1a1a]">
-          <!-- 添加用户名输入框 -->
-          <div class="p-4 bg-[#0d0d0d] border-b border-[#2a2a2a]">
-            <el-input v-model="usernameInput" placeholder="输入要过滤的用户名..." @keyup.enter="addUsername" class="max-w-400px">
-              <template #append>
-                <el-button type="primary" @click="addUsername">添加</el-button>
-              </template>
-            </el-input>
-          </div>
-
-          <el-empty v-if="filteredManualUsernames.length === 0" description="暂无手动过滤用户名" />
-          <template v-else>
-            <el-table :data="paginatedManualUsernames" class="flex-1">
-              <el-table-column label="用户名">
-                <template #default="{ row }">
-                  <el-tag type="warning" effect="dark">{{ row }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="100">
-                <template #default="{ row }">
-                  <el-button type="danger" size="small" @click="removeUsername(row, 'manual')"> 移除 </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div class="p-4 text-right border-t ">
-              <el-pagination
-                v-model:current-page="manualCurrentPage"
-                v-model:page-size="pageSize"
-                :page-sizes="[10, 20, 50, 100]"
-                :total="filteredManualUsernames.length"
-                layout="total, sizes, prev, pager, next, jumper"
-                background
-              />
-            </div>
-          </template>
-        </div>
-      </el-tab-pane>
-
-      <el-tab-pane label="白名单" name="whitelist">
-        <div class="h-[calc(100vh-200px)] flex flex-col bg-[#1a1a1a]">
-          <el-empty v-if="filteredWhitelistUsernames.length === 0" description="暂无白名单用户名" />
-          <template v-else>
-            <el-table :data="paginatedWhitelistUsernames" class="flex-1">
-              <el-table-column label="用户名">
-                <template #default="{ row }">
-                  <el-tag type="info" effect="dark">{{ row }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="100">
-                <template #default="{ row }">
-                  <el-button type="danger" size="small" @click="removeUsername(row, 'whitelist')"> 移除 </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div class="p-4 text-right border-t">
-              <el-pagination
-                v-model:current-page="whitelistCurrentPage"
-                v-model:page-size="pageSize"
-                :page-sizes="[10, 20, 50, 100]"
-                :total="filteredWhitelistUsernames.length"
-                layout="total, sizes, prev, pager, next, jumper"
-                background
-              />
-            </div>
-          </template>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
   </div>
 </template>

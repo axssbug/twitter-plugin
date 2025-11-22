@@ -31,7 +31,7 @@ async function handleRefresh() {
 <template>
   <el-container class="h-screen bg-[#1a1a1a]">
     <!-- 左侧菜单 -->
-    <el-aside width="240px" class="bg-[#0d0d0d] border-r border-[#2a2a2a]">
+    <el-aside width="240px" class="bg-[#0d0d0d] border-r border-[#2a2a2a] flex flex-col">
       <div class="p-6 border-b border-[#2a2a2a]">
         <h1 class="text-xl font-bold text-[#409eff] m-0">6551 推文过滤器</h1>
         <p class="text-sm text-gray-400 mt-2 mb-0">内容过滤管理工具</p>
@@ -43,7 +43,7 @@ async function handleRefresh() {
         background-color="#0d0d0d"
         text-color="#a0a0a0"
         active-text-color="#409eff"
-        class="flex-1"
+        class="border-none"
       >
         <el-menu-item index="accounts">
           <span>账号过滤</span>
@@ -55,6 +55,9 @@ async function handleRefresh() {
           <span>用户名过滤</span>
         </el-menu-item>
       </el-menu>
+
+      <!-- 占位空间 -->
+      <div class="flex-1"></div>
 
       <!-- 刷新按钮 -->
       <div class="p-4 border-t border-[#2a2a2a]">

@@ -187,15 +187,47 @@ export class UIManager {
 
       // 处理反馈按钮点击
       if (target.classList.contains('filter-feedback-btn')) {
-        const username = target.getAttribute('data-username')
-        if (username) {
-          const result = await this.reportManager.handleFeedbackMisreport(username)
-          if (result.success) {
-            alert(`已反馈 ${username} 为误报`)
-            this.tweetProcessor.showUserTweets(username)
-            this.updateFilterUI()
-          } else {
-            alert(`反馈失败: ${result.error}`)
+        const filterValue = target.getAttribute('data-username')
+        const filterType = target.getAttribute('data-filter-type')
+        if (filterValue && filterType) {
+          if (filterType === '账户') {
+            // 账户过滤：发送到background
+            const result = await this.reportManager.handleFeedbackMisreport(filterValue)
+            if (result.success) {
+              alert(`已反馈 ${filterValue} 为误报`)
+              this.tweetProcessor.showUserTweets(filterValue)
+              this.updateFilterUI()
+            } else {
+              alert(`反馈失败: ${result.error}`)
+            }
+          } else if (filterType === '关键词') {
+            // 关键词过滤：加入白名单
+            try {
+              const result = await chrome.storage.local.get(['manualWhitelistKeywords'])
+              const whitelist = result.manualWhitelistKeywords || []
+              if (!whitelist.includes(filterValue)) {
+                whitelist.push(filterValue)
+                await chrome.storage.local.set({ manualWhitelistKeywords: whitelist })
+              }
+              alert(`已将关键词 "${filterValue}" 加入白名单`)
+              this.tweetProcessor.showUserTweets(filterValue)
+              this.updateFilterUI()
+            } catch (error) {
+              alert('加入白名单失败')
+            }
+          } else if (filterType === '用户名') {
+            // 用户名过滤：从过滤列表中移除
+            try {
+              const result = await chrome.storage.local.get(['manualBlockedUsernames'])
+              const blockedList = result.manualBlockedUsernames || []
+              const newList = blockedList.filter((item: string) => item !== filterValue)
+              await chrome.storage.local.set({ manualBlockedUsernames: newList })
+              alert(`已将用户名 "${filterValue}" 从过滤列表中移除`)
+              this.tweetProcessor.showUserTweets(filterValue)
+              this.updateFilterUI()
+            } catch (error) {
+              alert('移除失败')
+            }
           }
         }
         return

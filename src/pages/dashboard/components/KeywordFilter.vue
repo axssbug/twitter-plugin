@@ -7,7 +7,9 @@ const manualWhitelistKeywords = ref<string[]>([]);
 const isFilterEnabled = ref(true);
 const currentTab = ref<"manual" | "whitelist">("manual");
 const keywordInput = ref("");
+const whitelistInput = ref("");
 const systemKeywordCount = ref(0);
+const isRefreshing = ref(false);
 
 // 搜索和分页
 const searchText = ref("");
@@ -110,6 +112,34 @@ async function addKeyword() {
 }
 
 /**
+ * 添加白名单关键词
+ */
+async function addWhitelist() {
+  const keyword = whitelistInput.value.trim();
+  if (!keyword) {
+    ElMessage.warning("关键词不能为空");
+    return;
+  }
+
+  if (manualWhitelistKeywords.value.includes(keyword)) {
+    ElMessage.warning("关键词已存在");
+    return;
+  }
+
+  try {
+    const newList = [...manualWhitelistKeywords.value, keyword];
+    await chrome.storage.local.set({ manualWhitelistKeywords: newList });
+    manualWhitelistKeywords.value = newList;
+    whitelistInput.value = "";
+    ElMessage.success("添加成功");
+    console.log(`[推文过滤器] 已添加白名单关键词: ${keyword}`);
+  } catch (error) {
+    console.error("[推文过滤器] 添加白名单关键词失败:", error);
+    ElMessage.error("添加失败");
+  }
+}
+
+/**
  * 移除关键词
  */
 async function removeKeyword(keyword: string, type: "manual" | "whitelist") {
@@ -145,6 +175,25 @@ async function removeKeyword(keyword: string, type: "manual" | "whitelist") {
 }
 
 /**
+ * 手动刷新数据
+ */
+async function handleRefresh() {
+  if (isRefreshing.value) return;
+
+  isRefreshing.value = true;
+  try {
+    await chrome.runtime.sendMessage({ type: 'MANUAL_UPDATE' });
+    await loadData();
+    ElMessage.success('数据刷新成功');
+  } catch (error) {
+    console.error('[推文过滤器] 刷新失败:', error);
+    ElMessage.error('刷新失败');
+  } finally {
+    isRefreshing.value = false;
+  }
+}
+
+/**
  * 监听存储变化（仅监听外部变化）
  */
 function setupStorageListener() {
@@ -171,7 +220,10 @@ onMounted(() => {
     <!-- 顶部工具栏 -->
     <div class="px-6 py-4 mb-4 border-b border-[#2a2a2a] flex justify-between items-center bg-[#0d0d0d]">
       <el-input v-model="searchText" placeholder="搜索关键词..." clearable class="max-w-400px" />
-      <el-switch v-model="isFilterEnabled" @change="toggleFilterEnabled" active-text="已启用" inactive-text="已禁用" />
+      <div class="flex items-center gap-4">
+        <el-switch v-model="isFilterEnabled" @change="toggleFilterEnabled" active-text="已启用" inactive-text="已禁用" />
+        <el-button :loading="isRefreshing" @click="handleRefresh" size="small">刷新</el-button>
+      </div>
     </div>
 
     <!-- 智能识别提示 -->
@@ -224,6 +276,15 @@ onMounted(() => {
 
       <el-tab-pane label="白名单" name="whitelist">
         <div class="h-[calc(100vh-200px)] flex flex-col bg-[#1a1a1a]">
+          <!-- 添加白名单关键词输入框 -->
+          <div class="p-4 bg-[#0d0d0d] border-b border-[#2a2a2a]">
+            <el-input v-model="whitelistInput" placeholder="输入要加入白名单的关键词..." @keyup.enter="addWhitelist" class="max-w-400px">
+              <template #append>
+                <el-button type="primary" @click="addWhitelist">添加</el-button>
+              </template>
+            </el-input>
+          </div>
+
           <el-empty v-if="filteredWhitelistKeywords.length === 0" description="暂无白名单关键词" />
           <template v-else>
             <el-table :data="paginatedWhitelistKeywords" class="flex-1">
